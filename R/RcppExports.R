@@ -9,6 +9,62 @@ daggp_build <- function(coords, dag, phi, sigmasq, nu, tausq, matern = 1L, num_t
     .Call(`_spLMC_daggp_build`, coords, dag, phi, sigmasq, nu, tausq, matern, num_threads, prune_dag)
 }
 
+#' Fit a Gaussian Process Linear Model of Coregionalization (GP-LMC)
+#'
+#' Implements an adaptive Metropolis sampler for the GP-LMC response model.
+#' The model assumes multivariate Gaussian process latent factors combined
+#' through a factor-loading matrix \eqn{A}, with independent measurement error
+#' across outcomes. The covariance of \eqn{Y} is
+#' \deqn{ \mathrm{Cov}( \mathrm{vec}(Y) ) = (A \otimes I_n) \; \mathrm{blkdiag}\{R_j\} \; (A^\top \otimes I_n) }
+#' where each \eqn{R_j} is the correlation matrix of the \eqn{j}-th latent process.
+#'
+#' @param Y \eqn{n \times q} matrix of outcomes, with \eqn{n} sites and \eqn{q} outcomes.
+#' @param coords \eqn{n \times d} matrix of spatial coordinates for the \eqn{n} sites.
+#' @param custom_dag A field of index vectors defining the Vecchia approximation
+#'   DAG structure for each site. Use R package github.com/mkln/spiox for building the DAG
+#' @param theta_opts A \eqn{4 \times q} matrix of latent GP hyperparameters, with rows
+#'   corresponding to \eqn{(\phi, \sigma^2, \nu, \tau^2)} and columns to outcomes.
+#' @param A_start Initial \eqn{q \times q} factor-loading matrix.
+#' @param mcmc Integer, number of MCMC iterations (default 1000).
+#' @param print_every Integer, print progress every this many iterations (default 100).
+#' @param dag_opts Integer controlling Vecchia DAG construction for gridded data:
+#'   \itemize{
+#'     \item \code{-1}: build a cache assuming coords are gridded and the dag was built under the same assumption
+#'     \item \code{0}: no change, use \code{custom_dag} as provided
+#'     \item \code{>0}: prune the DAG with the given pruning parameter to facilitate ties in parent sets. Example: if number of neighbors was set to 20 and dag_opts=5 then each node in the dag is pruned by at most 5 edges to facilitate, resulting to final number of neighbors between 15 and 20. 
+#'   }
+#' @param upd_A Logical, whether to update the loading matrix \eqn{A} (default TRUE).
+#' @param upd_theta Logical, whether to update GP hyperparameters \eqn{theta} (default TRUE).
+#' @param num_threads Integer, number of OpenMP threads to use (default 1).
+#'
+#' @return A list with elements:
+#' \item{Sigma}{\eqn{q \times q \times mcmc} array of posterior samples of \eqn{A A^\top}.}
+#' \item{theta}{\eqn{4 \times q \times mcmc} array of posterior samples of hyperparameters.}
+#' \item{dag_cache}{DAG structure used by the Vecchia approximation (for reference).}
+#'
+#' @details
+#' This function constructs an \code{LMC} object internally and runs MCMC
+#' updates for both the GP hyperparametersro and the factor loadings.
+#' Storage is provided for posterior draws of the implied covariance
+#' matrix \eqn{A A^\top} and the GP hyperparameters. Computation can be
+#' parallelized using OpenMP if available.
+#'
+#' @examples
+#' \dontrun{
+#'   # Example data
+#'   n <- 50; q <- 2
+#'   coords <- matrix(runif(n*2), n, 2)
+#'   Y <- matrix(rnorm(n*q), n, q)
+#'   theta_opts <- matrix(1, 4, q)
+#'   A_start <- diag(q)
+#'   custom_dag <- some_dag_constructor(coords) # user-provided
+#'
+#'   fit <- lmc_response(Y, coords, custom_dag, theta_opts, A_start,
+#'                       mcmc = 200, dag_opts = 0)
+#'   str(fit)
+#' }
+#'
+#' @export
 lmc_response <- function(Y, coords, custom_dag, theta_opts, A_start, mcmc = 1000L, print_every = 100L, dag_opts = 0L, upd_A = TRUE, upd_theta = TRUE, num_threads = 1L) {
     .Call(`_spLMC_lmc_response`, Y, coords, custom_dag, theta_opts, A_start, mcmc, print_every, dag_opts, upd_A, upd_theta, num_threads)
 }

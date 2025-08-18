@@ -1,5 +1,7 @@
 library(tidyverse)
 library(spLMC)
+# spiox package required to run dag_vecchia() 
+# remotes::install_github("mkln/spiox")
 
 set.seed(25) 
 n_threads <- 16
