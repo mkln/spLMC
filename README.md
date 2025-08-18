@@ -4,7 +4,7 @@ This package implements Gaussian Process Linear Model of Coregionalization (GP-L
 
 The main entry point is the function `lmc_response()`, which runs an adaptive Metropolis MCMC sampler for the latent GP hyperparameters and the factor loadings matrix.
 
-Find an example in `example/example.r`
+Find an example in [`example.r`](example/example.r)
 
 ## Math details
 
@@ -13,7 +13,7 @@ Let ![vec(Y)](https://latex.codecogs.com/svg.latex?\mathrm{vec}(Y)) denote the c
 
 We assume
 
-![likelihood](https://latex.codecogs.com/svg.latex?\mathrm{vec}(Y)\sim N\left(0,(A\otimes%20I_n)\mathrm{bdiag}(R_1,\ldots,R_q)(A^\top\otimes%20I_n)\right))
+![likelihood](https://latex.codecogs.com/svg.latex?\mathrm{vec}(Y)\sim%20N\left(0,(A\otimes%20I_n)\mathrm{bdiag}(R_1,\ldots,R_q)(A^\top\otimes%20I_n)\right))
 
 where  
 
