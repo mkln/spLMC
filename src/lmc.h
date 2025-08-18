@@ -3,6 +3,19 @@
 #include "ramadapt.h"
 #include "diwishlog.h"
 
+
+inline arma::mat t_fix_diag_sign(const arma::mat& A) {
+  arma::mat Astar = A;
+  int q = A.n_rows;
+  for (int j = 0; j < q; ++j) {
+    if (Astar(j,j) < 0) {
+      Astar.col(j) *= -1.0;
+    }
+  }
+  return Astar.t();
+}
+
+
 class LMC {
 public:
   // A: q x q. theta: 4 x q with rows (phi, sigmasq, nu, tausq). gps: size q.
@@ -13,8 +26,6 @@ public:
     : Y_(Y), q(A.n_rows), A_(A)
   {
     if (A_.n_cols != q) Rcpp::stop("A must be square q x q");
-    
-    A_ = arma::chol(A_ * A_.t(), "lower"); // identifiable
     
     n = coords.n_rows;                         // initialize n_
     matern = true;
@@ -37,9 +48,12 @@ public:
                                0, // with q blocks, make Ci
                                nthreads);
     }
-    daggp_options_alt = daggp_options;
+    //daggp_options_alt = daggp_options;
     
     init_adapt();
+    
+    build_u_cache_();
+    build_H_cache_();
   }
   
   // Update hyperparameters from a 4 x q matrix.
@@ -50,114 +64,9 @@ public:
     }
   }
   
-  double loglik(const arma::mat& Y) const {
-    const std::size_t N = n*q;
-    
-    arma::mat At = A_.t();
-    arma::mat AinvT_ = arma::solve(At, arma::eye(q, q));  // A^T X = I  -> X = A^{-T}
-    
-    // 1) u = (A^{-1} ⊗ I_n) y  == vec( Y * A^{-T} )
-    arma::mat W = Y * AinvT_;        // n x q
-    arma::vec u = arma::vectorise(W);
-    
-    // 2) t = H u, where H = blkdiag(H_1,...,H_q); H_j upper-triangular
-    arma::vec t(N, arma::fill::zeros);
-    double logdetR = 0.0;            // accumulate ∑ log|R_j|
-    for (std::size_t j = 0; j < q; ++j) {
-      logdetR += -daggp_options[j].precision_logdeterminant;
-      // t_j = Hj * u_j  (block of length n)
-      arma::uvec idx = arma::regspace<arma::uvec>(j*n, (j+1)*n - 1);
-      //arma::mat u_mat = u(idx);
-      t(idx) = daggp_options[j].H * u(idx);
-    }
-    double quad = arma::dot(t, t);
-    
-    double val, sign;
-    arma::log_det(val, sign, A_);
-    if (sign <= 0.0) Rcpp::stop("A must have positive determinant");
-    double logdetA_ = val;
-    
-    // 3) det term
-    double logdetSigma = 2.0 * static_cast<double>(n) * logdetA_ + logdetR;
-    
-    // 4) final log-likelihood
-    const double cst = static_cast<double>(N) * std::log(2.0 * M_PI);
-    return -0.5 * (cst + logdetSigma + quad);
-  }
-  
-  double loglik_curr() const {
-    const std::size_t N = n*q;
-    
-    arma::mat At = arma::chol(A_ * A_.t(), "upper");
-    arma::mat AinvT_ = arma::solve(At, arma::eye(q, q));  // A^T X = I  -> X = A^{-T}
-    
-    // 1) u = (A^{-1} ⊗ I_n) y  == vec( Y * A^{-T} )
-    arma::mat W = Y_ * AinvT_;        // n x q
-    arma::vec u = arma::vectorise(W);
-    
-    // 2) t = H u, where H = blkdiag(H_1,...,H_q); H_j upper-triangular
-    arma::vec t(N, arma::fill::zeros);
-    double logdetR = 0.0;            // accumulate ∑ log|R_j|
-    for (std::size_t j = 0; j < q; ++j) {
-      logdetR += -daggp_options[j].precision_logdeterminant;
-      // t_j = Hj * u_j  (block of length n)
-      arma::uvec idx = arma::regspace<arma::uvec>(j*n, (j+1)*n - 1);
-      //arma::mat u_mat = u(idx);
-      t(idx) = daggp_options[j].H * u(idx);
-    }
-    double quad = arma::dot(t, t);
-    
-    // 3) det term
-    double val, sign;
-    arma::log_det(val, sign, At);
-    if (sign <= 0.0) Rcpp::stop("A must have positive determinant");
-    double logdetA_ = val;
-    
-    double logdetSigma = 2.0 * static_cast<double>(n) * logdetA_ + logdetR;
-    
-    // 4) final log-likelihood
-    const double cst = static_cast<double>(N) * std::log(2.0 * M_PI);
-    return -0.5 * (cst + logdetSigma + quad);
-  }
-  
-  double loglik_theta_prop() const {
-    const std::size_t N = n*q;
-    
-    arma::mat At = arma::chol(A_ * A_.t(), "upper");
-    arma::mat AinvT_ = arma::solve(At, arma::eye(q, q));  // A^T X = I  -> X = A^{-T}
-  
-    // 1) u = (A^{-1} ⊗ I_n) y  == vec( Y * A^{-T} )
-    arma::mat W = Y_ * AinvT_;        // n x q
-    arma::vec u = arma::vectorise(W);
-    
-    // 2) t = H u, where H = blkdiag(H_1,...,H_q); H_j upper-triangular
-    arma::vec t(N, arma::fill::zeros);
-    double logdetR = 0.0;            // accumulate ∑ log|R_j|
-    for (std::size_t j = 0; j < q; ++j) {
-      logdetR += -daggp_options_alt[j].precision_logdeterminant;
-      // t_j = Hj * u_j  (block of length n)
-      arma::uvec idx = arma::regspace<arma::uvec>(j*n, (j+1)*n - 1);
-      //arma::mat u_mat = u(idx);
-      t(idx) = daggp_options_alt[j].H * u(idx);
-    }
-    double quad = arma::dot(t, t);
-    
-    double val, sign;
-    arma::log_det(val, sign, At);
-    if (sign <= 0.0) Rcpp::stop("A must have positive determinant");
-    double logdetA_ = val;
-    
-    // 3) det term
-    double logdetSigma = 2.0 * static_cast<double>(n) * logdetA_ + logdetR;
-    
-    // 4) final log-likelihood
-    const double cst = static_cast<double>(N) * std::log(2.0 * M_PI);
-    return -0.5 * (cst + logdetSigma + quad);
-  }
-  
   double loglik_A_prop(const arma::mat& A_alt) const {
     
-    arma::mat At = arma::chol(A_alt * A_alt.t(), "upper");
+    arma::mat At = t_fix_diag_sign(A_alt);
     arma::mat AinvT_ = arma::solve(At, arma::eye(q, q));  // A^T X = I  -> X = A^{-T}
     
     const std::size_t N = n*q;
@@ -191,14 +100,40 @@ public:
     return -0.5 * (cst + logdetSigma + quad);
   }
   
+  // compute prop loglik for index j only (no side effects)
+  double loglik_theta_prop_single_(int j, const DagGP& gp_prop) const {
+    const double quad_curr = arma::dot(t_, t_);
+    const arma::uword s = j*n, e = (j+1)*n - 1;
+    
+    arma::vec t_j_prop = gp_prop.H * u_.subvec(s, e);
+    const double quad_prop = quad_curr
+    - arma::dot(t_blocks_[j], t_blocks_[j])
+      + arma::dot(t_j_prop, t_j_prop);
+    
+    const double logdetR_prop = logdetR_sum_
+    - (-daggp_options[j].precision_logdeterminant)
+      + (-gp_prop.precision_logdeterminant);
+  
+    const double logdetSigma_prop = 2.0 * double(n) * logdetA_ + logdetR_prop;
+    const double cst = double(n*q) * std::log(2.0 * M_PI);
+    return -0.5 * (cst + logdetSigma_prop + quad_prop);
+  }
+  
+  double loglik_curr_fast_() const {
+    const double quad_curr = arma::dot(t_, t_);
+    const double logdetSigma_curr = 2.0 * double(n) * logdetA_ + logdetR_sum_;
+    const double cst = double(n*q) * std::log(2.0 * M_PI);
+    return -0.5 * (cst + logdetSigma_curr + quad_curr);
+  }
+  
   std::size_t n_sites() const { return n; }
   std::size_t q_dim()   const { return q; }
   
   arma::mat Y_;
   std::size_t q, n;
-  arma::mat A_, A_alt;
+  arma::mat A_;
   double logdetA_;
-  std::vector<DagGP> daggp_options, daggp_options_alt;
+  std::vector<DagGP> daggp_options;
   arma::mat theta_options; // each column is one alternative value for theta
   unsigned int n_options;
   
@@ -221,6 +156,37 @@ public:
   arma::mat A_unif_bounds;
   RAMAdapt A_adapt;
   int A_mcmc_counter;
+  
+  // caches
+  arma::vec u_;                  // length n*q
+  arma::vec t_;                  // length n*q
+  std::vector<arma::vec> t_blocks_;  // q blocks, each length n
+  double logdetR_sum_{0.0};
+  bool caches_valid_{false};
+  
+  void build_u_cache_() {
+    // AinvT_ and logdetA_ should already be cached as discussed earlier
+    arma::mat At = t_fix_diag_sign(A_);
+    arma::mat AinvT_ = arma::solve(At, arma::eye(q, q));  // A^T X = I  -> X = A^{-T}
+    
+    arma::mat W = Y_ * AinvT_;
+    u_ = arma::vectorise(W);
+  }
+  
+  void build_H_cache_() {
+    const std::size_t N = n * q;
+    t_.set_size(N);
+    t_blocks_.resize(q);
+    logdetR_sum_ = 0.0;
+    for (std::size_t j=0; j<q; ++j) {
+      t_blocks_[j].set_size(n);
+      const arma::uword s = j*n, e = (j+1)*n - 1;
+      t_blocks_[j] = daggp_options[j].H * u_.subvec(s, e);
+      t_.subvec(s, e) = t_blocks_[j];
+      logdetR_sum_ += -daggp_options[j].precision_logdeterminant;
+    }
+    caches_valid_ = true;
+  }
 };
 
 inline void LMC::init_adapt(){
@@ -270,8 +236,8 @@ inline void LMC::init_adapt(){
   Rcpp::Rcout << "A unif bounds \n";
   
   // metropolis for A
-  int n_A_par = q*q;
-  A_unif_bounds = arma::zeros(q*q, 2);
+  int n_A_par = q*(q+1)/2;
+  A_unif_bounds = arma::zeros(q*(q+1)/2, 2);
   A_unif_bounds.col(0) += -1e10;
   A_unif_bounds.col(1) += 1e10;
   
@@ -280,6 +246,69 @@ inline void LMC::init_adapt(){
   //A_adapt_active = true;
 }
 
+inline void LMC::upd_thetaj_metrop() {
+  if (!caches_valid_) { build_u_cache_(); build_H_cache_(); }
+  
+  arma::uvec oneuv = arma::ones<arma::uvec>(1);
+  for (int j = 0; j < q; ++j) {     
+    c_theta_adapt[j].count_proposal();
+    
+    arma::vec cur = theta_options(which_theta_elem, oneuv*j);
+    Rcpp::RNGScope scope;
+    arma::vec U_update = arma::randn(cur.n_elem);
+    arma::vec alt = par_huvtransf_back(
+      par_huvtransf_fwd(cur, c_theta_unif_bounds) +
+        c_theta_adapt[j].paramsd * U_update,
+        c_theta_unif_bounds);
+    
+    arma::mat theta_alt = theta_options;
+    theta_alt(which_theta_elem, oneuv*j) = alt;
+    if (!theta_alt.is_finite()) Rcpp::stop("theta out of bounds");
+    
+    // local temporary GP to avoid mutating others
+    DagGP gp_prop = daggp_options[j];
+    gp_prop.update_theta(theta_alt.col(j), true);
+    
+    const double curr_logdens = loglik_curr_fast_();
+    const double prop_logdens = loglik_theta_prop_single_(j, gp_prop);
+    
+    double logpriors = 0.0;
+    if (sigmasq_sampling)
+      logpriors += invgamma_logdens(theta_alt(1,j), 2, 1) - invgamma_logdens(theta_options(1,j), 2, 1);
+    if (tausq_sampling)
+      logpriors += expon_logdens(theta_alt(3,j), 25) - expon_logdens(theta_options(3,j), 25);
+    
+    const double jac = calc_jacobian(alt, cur, c_theta_unif_bounds);
+    const double logaccept = prop_logdens - curr_logdens + jac + logpriors;
+    
+    const bool accepted = do_I_accept(logaccept);
+    if (accepted) {
+      // commit θ_j
+      theta_options = theta_alt;
+      daggp_options[j] = gp_prop;
+      
+      // update caches for j only
+      const arma::uword s = j*n, e = (j+1)*n - 1;
+      // remove old contribution from aggregates
+      logdetR_sum_ -= -daggp_options[j].precision_logdeterminant; // alt vector copied earlier; same as old
+      logdetR_sum_ += -gp_prop.precision_logdeterminant;
+      
+      //const double old_q = arma::dot(t_blocks_[j], t_blocks_[j]);
+      //const double all_q = arma::dot(t_, t_);
+      // recompute new t_j and aggregates
+      t_blocks_[j] = gp_prop.H * u_.subvec(s, e);
+      t_.subvec(s, e) = t_blocks_[j];
+      
+      // no need to recompute quad here; loglik_curr_fast_ will recompute dot(t_,t_) next time
+    }
+    
+    c_theta_adapt[j].update_ratios();
+    c_theta_adapt[j].adapt(U_update, std::exp(std::min(0.0, logaccept)), theta_mcmc_counter);
+    ++theta_mcmc_counter;
+  }
+}
+
+/*
 inline void LMC::upd_thetaj_metrop(){
   
   arma::uvec oneuv = arma::ones<arma::uvec>(1);
@@ -342,6 +371,30 @@ inline void LMC::upd_thetaj_metrop(){
   }
   
 }
+*/
+inline arma::vec lower_triangular(const arma::mat& A) {
+  int q = A.n_rows;
+  int m = q * (q + 1) / 2;
+  arma::vec out(m);
+  int idx = 0;
+  for (int j = 0; j < q; ++j) {
+    for (int i = j; i < q; ++i) {
+      out(idx++) = A(i, j);
+    }
+  }
+  return out;
+}
+
+inline arma::mat lower_triangular_matrix(const arma::vec& v, int q) {
+  arma::mat A(q, q, arma::fill::zeros);
+  int idx = 0;
+  for (int j = 0; j < q; ++j) {
+    for (int i = j; i < q; ++i) {
+      A(i, j) = v(idx++);
+    }
+  }
+  return A;
+}
 
 inline void LMC::upd_A_metrop(){
   
@@ -349,7 +402,7 @@ inline void LMC::upd_A_metrop(){
 
   A_adapt.count_proposal();
   
-  arma::vec Av_cur = arma::vectorise(A_);
+  arma::vec Av_cur = lower_triangular(A_);
   
   Rcpp::RNGScope scope;
   arma::vec U_update = arma::randn(Av_cur.n_elem);
@@ -357,7 +410,7 @@ inline void LMC::upd_A_metrop(){
   arma::vec Av_alt = Av_cur + A_adapt.paramsd * U_update;
   
   // proposal for theta matrix
-  arma::mat A_alt = arma::mat(Av_alt.memptr(), q, q); 
+  arma::mat A_alt = lower_triangular_matrix(Av_alt, q); 
   
   //Rcpp::Rcout << A_adapt.paramsd << endl;
   //Rcpp::Rcout << "A current \n" << A_ << endl;
@@ -393,6 +446,9 @@ inline void LMC::upd_A_metrop(){
   if(accepted){
     //Rcpp::Rcout << "accepted" << endl;
     A_ = A_alt;
+    
+    build_u_cache_();
+    build_H_cache_();
   } 
   
   A_adapt.update_ratios();
