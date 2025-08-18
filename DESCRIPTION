@@ -1,0 +1,11 @@
+Package: spLMC
+Type: Package
+Title: Response model for zero-mean multivariate spatial data using linear model of coregionalization (LMC) cross-covariance
+Version: 0.1
+Date: 2025-08-17
+Author: Michele Peruzzi
+Maintainer: Michele Peruzzi <peruzzi@umich.edu>
+Description: Fits GP-LMC models to multivariate data using robust adaptive MCMC (Vihola 2012).
+License: GPL3
+Imports: Rcpp (>= 1.1.0)
+LinkingTo: Rcpp, RcppArmadillo
