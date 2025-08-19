@@ -26,4 +26,4 @@ where
 
 This package **does not** fit models with measurement error, **does not** allow setting the number of factors to less than the number of outcomes, and **does not** estimate linear covariate effects.  
 
-For these additional features, consider the R packages [`meshed`](https://github.com/mkln/meshed) and [`spBayes`](https://cran.r-project.org/package=spBayes).
+For these additional features, consider the R packages [`meshed`](https://github.com/mkln/meshed) and [`spBayes`](https://cran.r-project.org/package=spBayes). For the separable model, use [`spSeparable`](https://github.com/mkln/spSeparable). For IOX, use [`spiox`](https://github.com/mkln/spiox).
