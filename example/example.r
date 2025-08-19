@@ -24,7 +24,7 @@ phis <- c(30, 10, 1, 50) %>% sample(q, replace=T)
 
 # sample LMC data
 U <- rnorm(nr * q) %>% matrix(ncol=q)
-Llist <- 1:q %>% lapply(\(j) t(chol( exp(- theta[1,j] * as.matrix(dist(coords))) )) )
+Llist <- 1:q %>% lapply(\(j) t(chol( exp(- phis[j] * as.matrix(dist(coords))) )) )
 V <- 1:q %>% lapply(\(j) Llist[[j]] %*% U[,j]) %>% abind::abind(along=2)
 Y <- V %*% t(A)
 
