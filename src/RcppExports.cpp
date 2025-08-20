@@ -46,8 +46,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // lmc_response
-Rcpp::List lmc_response(const arma::mat& Y, const arma::mat& coords, const arma::field<arma::uvec>& custom_dag, arma::mat theta_opts, const arma::mat& A_start, int mcmc, int print_every, int dag_opts, bool upd_A, bool upd_theta, int num_threads);
-RcppExport SEXP _spLMC_lmc_response(SEXP YSEXP, SEXP coordsSEXP, SEXP custom_dagSEXP, SEXP theta_optsSEXP, SEXP A_startSEXP, SEXP mcmcSEXP, SEXP print_everySEXP, SEXP dag_optsSEXP, SEXP upd_ASEXP, SEXP upd_thetaSEXP, SEXP num_threadsSEXP) {
+Rcpp::List lmc_response(const arma::mat& Y, const arma::mat& coords, const arma::field<arma::uvec>& custom_dag, arma::mat theta_opts, const arma::mat& A_start, int mcmc, int print_every, int dag_opts, bool upd_A, bool upd_theta, int num_threads, bool matern, bool debug);
+RcppExport SEXP _spLMC_lmc_response(SEXP YSEXP, SEXP coordsSEXP, SEXP custom_dagSEXP, SEXP theta_optsSEXP, SEXP A_startSEXP, SEXP mcmcSEXP, SEXP print_everySEXP, SEXP dag_optsSEXP, SEXP upd_ASEXP, SEXP upd_thetaSEXP, SEXP num_threadsSEXP, SEXP maternSEXP, SEXP debugSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -62,7 +62,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type upd_A(upd_ASEXP);
     Rcpp::traits::input_parameter< bool >::type upd_theta(upd_thetaSEXP);
     Rcpp::traits::input_parameter< int >::type num_threads(num_threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(lmc_response(Y, coords, custom_dag, theta_opts, A_start, mcmc, print_every, dag_opts, upd_A, upd_theta, num_threads));
+    Rcpp::traits::input_parameter< bool >::type matern(maternSEXP);
+    Rcpp::traits::input_parameter< bool >::type debug(debugSEXP);
+    rcpp_result_gen = Rcpp::wrap(lmc_response(Y, coords, custom_dag, theta_opts, A_start, mcmc, print_every, dag_opts, upd_A, upd_theta, num_threads, matern, debug));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -70,7 +72,7 @@ END_RCPP
 static const R_CallMethodDef CallEntries[] = {
     {"_spLMC_Correlationc", (DL_FUNC) &_spLMC_Correlationc, 5},
     {"_spLMC_daggp_build", (DL_FUNC) &_spLMC_daggp_build, 9},
-    {"_spLMC_lmc_response", (DL_FUNC) &_spLMC_lmc_response, 11},
+    {"_spLMC_lmc_response", (DL_FUNC) &_spLMC_lmc_response, 13},
     {NULL, NULL, 0}
 };
 

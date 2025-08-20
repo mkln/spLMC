@@ -74,7 +74,9 @@ Rcpp::List lmc_response(const arma::mat& Y,
                           int dag_opts = 0,
                           bool upd_A = true,
                           bool upd_theta = true,
-                          int num_threads = 1){
+                          int num_threads = 1,
+                          bool matern = true,
+                          bool debug = false){
   
   Rcpp::Rcout << "GP-LMC response model." << endl;
   
@@ -95,7 +97,7 @@ Rcpp::List lmc_response(const arma::mat& Y,
   }
   
   LMC lmc(Y, coords, A_start, theta_opts, custom_dag, dag_opts,
-                  num_threads);
+                  num_threads, matern);
   
   // storage
   arma::cube theta = arma::zeros(4, q, mcmc);
@@ -108,10 +110,24 @@ Rcpp::List lmc_response(const arma::mat& Y,
   for(unsigned int m=0; m<mcmc; m++){
     
     if(upd_theta){
-      lmc.upd_thetaj_metrop();
+      try {
+        lmc.upd_thetaj_metrop();
+      } catch (std::exception &ex) {
+        if(debug){
+          Rcpp::Rcout << "Error in upd_thetaj_metrop at iteration " 
+                      << m+1 << ": " << ex.what() << std::endl;
+        }
+      }
     }
     if(upd_A){
-      lmc.upd_A_metrop();
+      try {
+        lmc.upd_A_metrop();
+      } catch (std::exception &ex) {
+        if(debug){
+          Rcpp::Rcout << "Error in upd_A_metrop at iteration " 
+                      << m+1 << ": " << ex.what() << std::endl;
+        }
+      }
     }
     
     Sigma.slice(m) = lmc.A_ * lmc.A_.t();

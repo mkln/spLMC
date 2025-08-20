@@ -65,7 +65,7 @@ daggp_build <- function(coords, dag, phi, sigmasq, nu, tausq, matern = 1L, num_t
 #' }
 #'
 #' @export
-lmc_response <- function(Y, coords, custom_dag, theta_opts, A_start, mcmc = 1000L, print_every = 100L, dag_opts = 0L, upd_A = TRUE, upd_theta = TRUE, num_threads = 1L) {
-    .Call(`_spLMC_lmc_response`, Y, coords, custom_dag, theta_opts, A_start, mcmc, print_every, dag_opts, upd_A, upd_theta, num_threads)
+lmc_response <- function(Y, coords, custom_dag, theta_opts, A_start, mcmc = 1000L, print_every = 100L, dag_opts = 0L, upd_A = TRUE, upd_theta = TRUE, num_threads = 1L, matern = TRUE, debug = FALSE) {
+    .Call(`_spLMC_lmc_response`, Y, coords, custom_dag, theta_opts, A_start, mcmc, print_every, dag_opts, upd_A, upd_theta, num_threads, matern, debug)
 }
 

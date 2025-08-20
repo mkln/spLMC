@@ -22,13 +22,13 @@ public:
   LMC(const arma::mat& Y,
     const arma::mat& coords, const arma::mat& A, 
       const arma::mat& theta_opts, const arma::field<arma::uvec>& dag, 
-      int dagopts, int nthreads)
+      int dagopts, int nthreads, bool cov_matern = true)
     : Y_(Y), q(A.n_rows), A_(A)
   {
     if (A_.n_cols != q) Rcpp::stop("A must be square q x q");
     
     n = coords.n_rows;                         // initialize n_
-    matern = true;
+    matern = cov_matern;
     
     theta_options = theta_opts;
     n_options = theta_options.n_cols;
