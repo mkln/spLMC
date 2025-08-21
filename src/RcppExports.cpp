@@ -68,11 +68,30 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// lmc_logdens
+double lmc_logdens(const arma::mat& Y, const arma::mat& coords, const arma::field<arma::uvec>& custom_dag, arma::mat theta, const arma::mat& Sigma, int dag_opts, int num_threads, bool matern);
+RcppExport SEXP _spLMC_lmc_logdens(SEXP YSEXP, SEXP coordsSEXP, SEXP custom_dagSEXP, SEXP thetaSEXP, SEXP SigmaSEXP, SEXP dag_optsSEXP, SEXP num_threadsSEXP, SEXP maternSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type Y(YSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type coords(coordsSEXP);
+    Rcpp::traits::input_parameter< const arma::field<arma::uvec>& >::type custom_dag(custom_dagSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Sigma(SigmaSEXP);
+    Rcpp::traits::input_parameter< int >::type dag_opts(dag_optsSEXP);
+    Rcpp::traits::input_parameter< int >::type num_threads(num_threadsSEXP);
+    Rcpp::traits::input_parameter< bool >::type matern(maternSEXP);
+    rcpp_result_gen = Rcpp::wrap(lmc_logdens(Y, coords, custom_dag, theta, Sigma, dag_opts, num_threads, matern));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_spLMC_Correlationc", (DL_FUNC) &_spLMC_Correlationc, 5},
     {"_spLMC_daggp_build", (DL_FUNC) &_spLMC_daggp_build, 9},
     {"_spLMC_lmc_response", (DL_FUNC) &_spLMC_lmc_response, 13},
+    {"_spLMC_lmc_logdens", (DL_FUNC) &_spLMC_lmc_logdens, 8},
     {NULL, NULL, 0}
 };
 

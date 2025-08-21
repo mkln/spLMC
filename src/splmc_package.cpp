@@ -116,7 +116,9 @@ Rcpp::List lmc_response(const arma::mat& Y,
         if(debug){
           Rcpp::Rcout << "Error in upd_thetaj_metrop at iteration " 
                       << m+1 << ": " << ex.what() << std::endl;
+          
         }
+        Rcpp::stop("MCMC stopped.\n");
       }
     }
     if(upd_A){
@@ -126,7 +128,9 @@ Rcpp::List lmc_response(const arma::mat& Y,
         if(debug){
           Rcpp::Rcout << "Error in upd_A_metrop at iteration " 
                       << m+1 << ": " << ex.what() << std::endl;
+          
         }
+        Rcpp::stop("MCMC stopped.\n");
       }
     }
     
@@ -152,5 +156,29 @@ Rcpp::List lmc_response(const arma::mat& Y,
     Rcpp::Named("theta") = theta,
     Rcpp::Named("dag_cache") = lmc.daggp_options[0].dag_cache
   );
+  
+}
+
+// [[Rcpp::export]]
+double lmc_logdens(const arma::mat& Y, 
+                        const arma::mat& coords,
+                        
+                        const arma::field<arma::uvec>& custom_dag,
+                        
+                        arma::mat theta, 
+                        const arma::mat& Sigma,
+                        
+                        int dag_opts = 0,
+                        int num_threads = 1,
+                        bool matern = true){
+  
+  unsigned int q = Y.n_cols;
+  unsigned int n = Y.n_rows;
+
+  arma::mat A = arma::chol(Sigma, "lower");
+  LMC lmc(Y, coords, A, theta, custom_dag, dag_opts,
+          num_threads, matern);
+  
+  return lmc.logdens_curr_fast_();
   
 }

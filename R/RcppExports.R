@@ -69,3 +69,7 @@ lmc_response <- function(Y, coords, custom_dag, theta_opts, A_start, mcmc = 1000
     .Call(`_spLMC_lmc_response`, Y, coords, custom_dag, theta_opts, A_start, mcmc, print_every, dag_opts, upd_A, upd_theta, num_threads, matern, debug)
 }
 
+lmc_logdens <- function(Y, coords, custom_dag, theta, Sigma, dag_opts = 0L, num_threads = 1L, matern = TRUE) {
+    .Call(`_spLMC_lmc_logdens`, Y, coords, custom_dag, theta, Sigma, dag_opts, num_threads, matern)
+}
+
