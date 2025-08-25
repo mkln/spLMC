@@ -102,6 +102,7 @@ Rcpp::List lmc_response(const arma::mat& Y,
   // storage
   arma::cube theta = arma::zeros(4, q, mcmc);
   arma::cube Sigma = arma::zeros(q, q, mcmc);
+  arma::vec logdens = arma::zeros(mcmc);
   
   if(print_every > 0){
     Rcpp::Rcout << "Starting MCMC" << endl;
@@ -122,20 +123,16 @@ Rcpp::List lmc_response(const arma::mat& Y,
       }
     }
     if(upd_A){
-      try {
-        lmc.upd_A_metrop();
-      } catch (std::exception &ex) {
-        if(debug){
-          Rcpp::Rcout << "Error in upd_A_metrop at iteration " 
-                      << m+1 << ": " << ex.what() << std::endl;
-          
-        }
-        Rcpp::stop("MCMC stopped.\n");
-      }
+      lmc.sample_A_conditional();
     }
     
     Sigma.slice(m) = lmc.A_ * lmc.A_.t();
-    theta.slice(m) = lmc.theta_options;
+    
+    // sigma set to 1 as it goes into Sigma
+    arma::mat theta_norm = lmc.theta_options;
+    theta_norm.row(1).fill(1);
+    theta.slice(m) = theta_norm;
+    logdens(m) = lmc.logdens;
     
     bool print_condition = (print_every>0);
     if(print_condition){
@@ -154,6 +151,7 @@ Rcpp::List lmc_response(const arma::mat& Y,
   return Rcpp::List::create(
     Rcpp::Named("Sigma") = Sigma,
     Rcpp::Named("theta") = theta,
+    Rcpp::Named("logdens") = logdens,
     Rcpp::Named("dag_cache") = lmc.daggp_options[0].dag_cache
   );
   
@@ -179,6 +177,6 @@ double lmc_logdens(const arma::mat& Y,
   LMC lmc(Y, coords, A, theta, custom_dag, dag_opts,
           num_threads, matern);
   
-  return lmc.logdens_curr_fast_();
+  return lmc.logdens;
   
 }

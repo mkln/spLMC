@@ -23,23 +23,32 @@ public:
     const arma::mat& coords, const arma::mat& A, 
       const arma::mat& theta_opts, const arma::field<arma::uvec>& dag, 
       int dagopts, int nthreads, bool cov_matern = true)
-    : Y_(Y), q(A.n_rows), A_(A)
+    : Y_(Y), q(A.n_rows), k(theta_opts.n_cols), A_(A), n_threads(nthreads)
   {
-    if (A_.n_cols != q) Rcpp::stop("A must be square q x q");
     
+
     n = coords.n_rows;                         // initialize n_
     matern = cov_matern;
     
-    theta_options = theta_opts;
-    n_options = theta_options.n_cols;
-    daggp_options = std::vector<DagGP>(n_options);//.reserve(n_options);
     
     // if multiple nu options, interpret as wanting to sample smoothness for matern
     // otherwise, power exponential with fixed exponent.
-    phi_sampling = (q == 1) | (arma::var(theta_options.row(0)) != 0);
-    sigmasq_sampling = (q == 1) | (arma::var(theta_options.row(1)) != 0);
-    nu_sampling = (q == 1) | (arma::var(theta_options.row(2)) != 0);
-    tausq_sampling = (q == 1) | (arma::var(theta_options.row(3)) != 0);
+    phi_sampling = (q == 1) | (arma::var(theta_opts.row(0)) != 0);
+    sigmasq_sampling = (q == 1) | (arma::var(theta_opts.row(1)) != 0);
+    nu_sampling = (q == 1) | (arma::var(theta_opts.row(2)) != 0);
+    tausq_sampling = (q == 1) | (arma::var(theta_opts.row(3)) != 0);
+    
+    if(k < q){
+      arma::mat add_noise = arma::zeros(4, q-k);
+      add_noise.row(0) += 1e10;
+      add_noise.row(1) += 1;
+      add_noise.row(2) += 0.5;
+      theta_options = arma::join_horiz(theta_opts, add_noise);
+    } else {
+      theta_options = theta_opts;
+    }
+    
+    daggp_options = std::vector<DagGP>(q);
     
     for(unsigned int i=0; i<q; i++){
       daggp_options[i] = DagGP(coords, theta_options.col(i), dag, 
@@ -57,7 +66,13 @@ public:
     
     build_u_cache_();
     build_H_cache_();
+    
+    logdens = logdens_curr_fast_();
   }
+  
+  int n_threads;
+  
+  double logdens;
   
   double logdens_A_prop(const arma::mat& A_alt) {
     
@@ -120,12 +135,11 @@ public:
   std::size_t q_dim()   const { return q; }
   
   arma::mat Y_;
-  std::size_t q, n;
+  std::size_t q, n, k;
   arma::mat A_;
   double logdetA_;
   std::vector<DagGP> daggp_options;
   arma::mat theta_options; // each column is one alternative value for theta
-  unsigned int n_options;
   
   bool matern;
   
@@ -142,6 +156,7 @@ public:
   void init_adapt();
   void upd_thetaj_metrop();
   void upd_A_metrop();
+  void sample_A_conditional();
   
   arma::mat A_unif_bounds;
   RAMAdapt A_adapt;
@@ -208,8 +223,8 @@ inline void LMC::init_adapt(){
   c_theta_unif_bounds = bounds_all;
   int c_theta_par = which_theta_elem.n_elem;
   arma::mat c_theta_metrop_sd = 0.05 * arma::eye(c_theta_par, c_theta_par);
-  c_theta_adapt = std::vector<RAMAdapt>(n_options);
-  for(int j=0; j<n_options; j++){
+  c_theta_adapt = std::vector<RAMAdapt>(k);
+  for(int j=0; j<k; j++){
     c_theta_adapt[j] = RAMAdapt(c_theta_par, c_theta_metrop_sd, 0.24);
   }
   // ---  
@@ -230,7 +245,7 @@ inline void LMC::upd_thetaj_metrop() {
   if (!caches_valid_) { build_u_cache_(); build_H_cache_(); }
   
   arma::uvec oneuv = arma::ones<arma::uvec>(1);
-  for (int j = 0; j < q; ++j) {     
+  for (int j = 0; j < k; ++j) {     
     c_theta_adapt[j].count_proposal();
     
     arma::vec cur = theta_options(which_theta_elem, oneuv*j);
@@ -279,6 +294,10 @@ inline void LMC::upd_thetaj_metrop() {
       V.col(j) = gp_prop.H * U.col(j);
       
       // no need to recompute quad here; logdens_curr_fast_ will recompute dot(t_,t_) next time
+      
+      logdens = prop_logdens;
+    } else {
+      logdens = curr_logdens;
     }
     
     c_theta_adapt[j].update_ratios();
@@ -364,7 +383,11 @@ inline void LMC::upd_A_metrop(){
     
     build_u_cache_();
     build_H_cache_();
-  } 
+    
+    logdens = prop_logdens;
+  } else {
+    logdens = curr_logdens;
+  }
   
   A_adapt.update_ratios();
   
@@ -372,4 +395,40 @@ inline void LMC::upd_A_metrop(){
   A_adapt.adapt(U_update, exp(logaccept), A_mcmc_counter); 
   //}
   A_mcmc_counter++;
+}
+
+inline void LMC::sample_A_conditional(){
+  
+  arma::mat Bcond = arma::zeros(q, q);
+  arma::vec sigmas = arma::zeros(q);
+  
+  arma::mat rand_mvn = arma::randn(q, q);
+  
+  sigmas(0) = sqrt( daggp_options[0].theta(1) );
+  
+#ifdef _OPENMP
+#pragma omp parallel for num_threads(n_threads)
+#endif
+  for(int j=1; j<q; j++){
+    sigmas(j) = sqrt( daggp_options[j].theta(1) );
+    
+    arma::mat X_local = Y_.cols(0, j-1);
+    arma::vec y_local = Y_.col(j);
+    
+    arma::sp_mat Ci = daggp_options[j].H.t() * daggp_options[j].H;
+    arma::mat XtCi = X_local.t() * Ci;
+    arma::mat XtCiX = XtCi * X_local;
+    arma::mat XtCiy = XtCi * y_local;
+    
+    arma::mat inv_chol_prec = arma::inv(arma::trimatl( arma::chol(XtCiX, "lower") ));
+    
+    arma::vec sub_rand_mvn = arma::trans( rand_mvn.submat(j, 0, j, j-1) );
+    arma::vec b_post = inv_chol_prec.t() * ( inv_chol_prec * XtCiy + sub_rand_mvn);
+    
+    Bcond.submat(j, 0, j, j-1) = arma::trans( b_post );
+  }
+  
+  arma::mat Iq = arma::eye(q,q);
+  A_ = arma::solve(arma::trimatl(Iq - Bcond), arma::diagmat(sigmas));
+
 }
